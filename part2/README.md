@@ -26,6 +26,32 @@ python evaluate.py
   --development_records records/ground_truth_dev.pkl
 ```
 
+## Report and export the selected checkpoint
+
+For the final configuration, place the epoch 6 checkpoint files in
+`checkpoints/ft_experiments/experiment/best/`. The selected decoder uses beam
+width 4 and a 512-token generation limit. To regenerate the development
+predictions and save the Q6 metrics and error examples:
+
+```bash
+python train_t5.py --finetune --experiment_name experiment --eval_only --num_beams 4
+python evaluate.py \
+  --predicted_sql results/t5_ft_experiment_dev.sql \
+  --predicted_records records/t5_ft_experiment_dev.pkl \
+  --development_sql data/dev.sql \
+  --development_records records/ground_truth_dev.pkl \
+  --development_questions data/dev.nl > results/t5_ft_experiment_dev_analysis.json
+```
+
+The error categories describe execution outcomes. Compare the example queries
+with their questions and reference SQL to explain the causes in the report.
+Once you have selected the final model on the development set, export the Q7
+files in test-set order:
+
+```bash
+python train_t5.py --finetune --experiment_name experiment --export_test --num_beams 4
+```
+
 ## Submission
 
 You need to submit your test SQL queries and their associated SQL records. Please only submit your final files corresponding to the test set.

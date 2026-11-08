@@ -1,5 +1,5 @@
 import datasets
-from datasets import load_dataset
+from datasets import concatenate_datasets, load_dataset
 from transformers import AutoTokenizer
 from torch.utils.data import DataLoader
 from transformers import AutoModelForSequenceClassification
@@ -45,7 +45,22 @@ def do_train(args, model, train_dataloader, save_dir="./out"):
     # You can use progress_bar.update(1) to see the progress during training
     # You can refer to the pytorch tutorial covered in class for reference
 
-    raise NotImplementedError
+    for epoch in range(num_epochs):
+        for batch in train_dataloader:
+            batch = {key: value.to(device) for key, value in batch.items()}
+            optimizer.zero_grad(set_to_none=True)
+
+            # Forward pass: labels let the model compute classification loss.
+            outputs = model(**batch)
+            loss = outputs.loss
+
+            # Backward computes gradients; the optimizer updates parameters.
+            loss.backward()
+            optimizer.step()
+            lr_scheduler.step()
+            progress_bar.update(1)
+
+    progress_bar.close()
 
     ##### YOUR CODE ENDS HERE ######
 
@@ -93,7 +108,16 @@ def create_augmented_dataloader(args, dataset):
     # dataloader will be for the original training split augmented with 5k random transformed examples from the training set.
     # You may find it helpful to see how the dataloader was created at other place in this code.
 
-    raise NotImplementedError
+    original_train = dataset["train"]
+    sampled_train = original_train.shuffle(seed=42).select(range(5000))
+    transformed_train = sampled_train.map(custom_transform)
+    augmented_train = concatenate_datasets([original_train, transformed_train])
+
+    tokenized_train = augmented_train.map(tokenize_function, batched=True)
+    tokenized_train = tokenized_train.remove_columns(["text"])
+    tokenized_train = tokenized_train.rename_column("label", "labels")
+    tokenized_train.set_format("torch")
+    train_dataloader = DataLoader(tokenized_train, shuffle=True, batch_size=args.batch_size)
 
     ##### YOUR CODE ENDS HERE ######
 

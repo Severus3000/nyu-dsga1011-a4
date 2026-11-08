@@ -4,6 +4,8 @@ import os
 import re
 import pickle
 import random
+from contextlib import closing
+from pathlib import Path
 from tqdm import tqdm
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -30,6 +32,10 @@ def compute_metrics(gt_path: str, model_path: str, gt_query_records: str = None,
     '''
     gt_qs, gt_records, _ = load_queries_and_records(gt_path, gt_query_records)
     model_qs, model_records, model_error_msgs = load_queries_and_records(model_path, model_query_records)
+    if not len(gt_qs) or not (
+        len(gt_qs) == len(gt_records) == len(model_qs) == len(model_records) == len(model_error_msgs)
+    ):
+        raise ValueError("Expected a prediction and records for every reference query")
 
     sql_em = compute_sql_exact_match(gt_qs, model_qs)
     record_em = compute_record_exact_match(gt_records, model_records)
@@ -122,19 +128,25 @@ def compute_records(processed_qs: List[str]):
             
     return recs, error_msgs
 
-def compute_record(query_id, query):
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
+def authorize_read(action, _arg1, _arg2, _database, _source):
+    if action in (sqlite3.SQLITE_SELECT, sqlite3.SQLITE_READ, sqlite3.SQLITE_FUNCTION, sqlite3.SQLITE_RECURSIVE):
+        return sqlite3.SQLITE_OK
+    return sqlite3.SQLITE_DENY
 
+def compute_record(query_id, query):
+    if not query.strip():
+        return query_id, [], "Empty SQL query"
+
+    db_uri = Path(DB_PATH).resolve().as_uri() + "?mode=ro"
     try:
-        cursor.execute(query)
-        rec = cursor.fetchall()
+        with closing(sqlite3.connect(db_uri, uri=True)) as conn:
+            conn.set_authorizer(authorize_read)
+            rec = conn.execute(query).fetchall()
         error_msg = ""
     except Exception as e:
         rec = []
         error_msg = f"{type(e).__name__}: {e}"
 
-    conn.close()
     return query_id, rec, error_msg
 
 def compute_sql_exact_match(gt_qs: List[str], model_qs: List[str]):

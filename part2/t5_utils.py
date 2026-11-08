@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 
 import torch
 
@@ -8,6 +9,7 @@ from transformers.pytorch_utils import ALL_LAYERNORM_LAYERS
 import wandb
 
 DEVICE = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
+MODEL_NAME = "google-t5/t5-small"
 
 def setup_wandb(args):
     # Implement this if you wish to use wandb in your experiments
@@ -20,7 +22,12 @@ def initialize_model(args):
     or training a T5 model initialized with the 'google-t5/t5-small' config
     from scratch.
     '''
-    pass
+    if args.finetune:
+        model = T5ForConditionalGeneration.from_pretrained(MODEL_NAME)
+    else:
+        config = T5Config.from_pretrained(MODEL_NAME)
+        model = T5ForConditionalGeneration(config)
+    return model.to(DEVICE)
 
 def mkdir(dirpath):
     if not os.path.exists(dirpath):
@@ -29,13 +36,20 @@ def mkdir(dirpath):
         except FileExistsError:
             pass
 
+def get_checkpoint_dir(args):
+    model_type = "ft" if args.finetune else "scr"
+    return Path("checkpoints") / f"{model_type}_experiments" / args.experiment_name
+
 def save_model(checkpoint_dir, model, best):
-    # Save model checkpoint to be able to load the model later
-    pass
+    slot = "best" if best else "latest"
+    model.save_pretrained(Path(checkpoint_dir) / slot)
 
 def load_model_from_checkpoint(args, best):
-    # Load model from a checkpoint
-    pass
+    slot = "best" if best else "latest"
+    path = get_checkpoint_dir(args) / slot
+    if not path.is_dir():
+        raise FileNotFoundError(f"Model checkpoint does not exist: {path}")
+    return T5ForConditionalGeneration.from_pretrained(path, local_files_only=True).to(DEVICE)
 
 def initialize_optimizer_and_scheduler(args, model, epoch_length):
     optimizer = initialize_optimizer(args, model)

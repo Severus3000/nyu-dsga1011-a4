@@ -9,6 +9,7 @@ import torch
 from tqdm.auto import tqdm
 import evaluate
 import random
+import re
 import argparse
 from nltk.corpus import wordnet
 from nltk import word_tokenize
@@ -44,7 +45,27 @@ def custom_transform(example):
 
     # You should update example["text"] using your transformation
 
-    raise NotImplementedError
+    # Seed by text so all models are evaluated on the same transformed reviews.
+    rng = random.Random("a4-typos-v1:" + example["text"])
+    typo_probability = 0.40
+
+    def introduce_typo(match):
+        word = match.group(0)
+        # Keep the first/last letters; swapping identical letters has no effect.
+        positions = [
+            i for i in range(1, len(word) - 2)
+            if word[i] != word[i + 1]
+        ]
+        if not positions or rng.random() >= typo_probability:
+            return word
+
+        i = rng.choice(positions)
+        letters = list(word)
+        letters[i], letters[i + 1] = letters[i + 1], letters[i]
+        return "".join(letters)
+
+    example = example.copy()
+    example["text"] = re.sub(r"\b[A-Za-z]{4,}\b", introduce_typo, example["text"])
 
     ##### YOUR CODE ENDS HERE ######
 
